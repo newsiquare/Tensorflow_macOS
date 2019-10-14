@@ -1,0 +1,197 @@
+(Easy) Build tensorflow 且打開opt（啟動CPU的AVX, SSE4.1…）
+
+**********************
+安装 JDK 8
+http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html
+
+重開機…
+*********************
+安裝 bazel
+brew install bazel 
+********************* 本安裝的bazel是0.11.0版 *******************
+
+於anaconda設定pyhton3.5環境安裝 
+安裝six  numpy  wheel  git  lxml spicy pillow
+
+於terminal激活自己anaconda建立環境『py35_opt_tensorflow140』
+source activate py35_opt_tensorflow140
+
+設定資料夾tensorflow_source，並進入
+cd /Users/siquare/Desktop/tensorflow_source 
+
+抓取所需版本tensorflow SourceCode （本教學是抓1.4.0）
+https://github.com/tensorflow/tensorflow/releases
+
+再將source放到所需位置，並進入資料夾tensorflow-1.4.0_build_opt
+cd ~/Users/siquare/Desktop/tensorflow_source/tensorflow-1.4.0_build_opt
+
+啟動配置
+./configure
+
+然後看到y/n, 全部都選n
+
+然後出現Configuration finished, 即輸入指令
+bazel build --config=opt //tensorflow/tools/pip_package:build_pip_package
+
+會出現第一種error, 是由Bazel本身問題造成，解決步驟有2steps
+Step1
+打開~/tensorflow/workspace.bzl，  將check_version(“0.5.4”)，改為check_version(“0.11.0”)
+<因為我目前brew裝的bazel是0.11.0>
+
+Step2 (下面資料夾位置每一次都會變動..)
+打開 /private/var/tmp/_bazel_siquare/965feda370c0b652c2bac1693bb090ee/external/io_bazel_rules_closure/closure/repositories.bzl"
+修改line 69的_check_bazel_version("Closure Rules", “0.4.5”), 改為0.11.0
+
+
+接著，還是會出現很多errors，所以上述的指令要多加入
+--incompatible_load_argument_is_label=false 
+--incompatible_disallow_uncalled_set_constructor=false
+
+使得正確指令變成
+bazel build --config=opt --incompatible_load_argument_is_label=false --incompatible_disallow_uncalled_set_constructor=false //tensorflow/tools/pip_package:build_pip_package
+
+<< 107.3.26 kase 遇到 >>
+ERROR: /private/var/tmp/_bazel_kase/5464442fc0840549fff6e08a86b7d9ff/external/local_config_cc/BUILD:50:5: in apple_cc_toolchain rule @local_config_cc//:cc-compiler-darwin_x86_64: Xcode version must be specified to use an Apple CROSSTOOL. If your Xcode version has changed recently, try: "bazel clean --expunge" to re-run Xcode configuration
+ERROR: Analysis of target '//tensorflow/tools/pip_package:build_pip_package' failed; build aborted: Analysis of target '@local_config_cc//:cc-compiler-darwin_x86_64' failed; build aborted
+INFO: Elapsed time: 4.176s
+
+
+
+
+輸入下面後，即生成.whl
+bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
+
+找尋.whl正確的名稱
+ls /tmp/tensorflow_pkg
+
+出現..
+tensorflow-1.4.0-cp35-cp35m-macosx_10_6_x86_64.whl
+
+輸入..
+$ pip install /tmp/tensorflow_pkg/tensorflow-1.4.0-cp35-cp35m-macosx_10_6_x86_64.whl
+
+
+***********************************************************
+如果發生任何問題，可能是protoc問題，則要完成這段...
+
+anaconda中安裝libprotobuf
+
+進入資料夾Tensorflow model的research, 這個做一次就可以
+$ protoc object_detection/protos/*.proto --python_out=.
+
+# 將 models/research 與 models/research/slim 加入 PYTHONPATH
+$ export PYTHONPATH=$PYTHONPATH:/Users/siquare/Desktop/Code/tensorflow/models-master/research:/Users/siquare/Desktop/Code/tensorflow/models-master/research/slim
+
+# 將該anaconda的package位置加入
+$ export PYTHONPATH=$PYTHONPATH:/Users/siquare/anaconda3/envs/py35_opt_tensorflow140/lib/python3.5/site-packages 
+
+確認有完成路徑輸入
+$ echo $PYTHONPATH
+
+$ python object_detection/builders/model_builder_test.py
+測試出現OK, 就大功告成一半^^
+***********************************************************
+
+到此已安裝成功，進行
+測試1..
+$python
+import tensorflow as tf
+hello = tf.constant('Hello, TensorFlow!')
+sess = tf.Session()
+print(sess.run(hello))
+a = tf.constant(10)
+b = tf.constant(32)
+print(sess.run(a + b))
+>>b'Hello, TensorFlow!'
+>> 42
+
+
+測試2..
+$ cd tensorflow/examples/get_started/regression
+$ python3 dnn_regression.py
+>>出現 
+>>al_step = 5000, loss = 222.90656
+>>RMS error for the test set: $2133
+
+
+測試3..
+$ jupyter notebook      <這一定要，不能直接點擊jupyternotebook>
+
+在jupyternotebook中打開 ~object_detection/object_detection_tutorial.ipynb
+
+完成狗狗圖＆海邊圖的辨識
+
+
+
+測試4..
+打開此範例第2page，複製最下面的程式碼至spyder
+https://blog.gtwang.org/programming/tensorflow-object-detection-api-tutorial/2/
+
+安裝opencv 非官方版 $ pip install opencv-contrib-python
+
+以spyder執行，必須要能完成『自動物件辨識』且無error, 無AVX or SSE4.1 ...問題
+
+
+測試5-修改object detection模型
+Spyder打開測試5所建立的檔案
+
+到下述網址選擇所需要的model, 例如ssd_inception_v2_coco_2017_11_17 
+https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md
+
+把原本程式碼的補充如下
+#MODEL_NAME = 'ssd_mobilenet_v1_coco_2017_11_17'
+MODEL_NAME = ‘ssd_inception_v2_coco_2017_11_17’
+
+執行該程式碼，會先自動下載該模型，且進行object detection
+
+
+測試6-用tensorflow＋Mask R-CNN做到 instance segmentation
+[參考1]https://github.com/markjay4k/Mask-RCNN-series
+[參考1-video]https://www.youtube.com/watch?v=lLM8oAsi32g
+[最經典]https://github.com/matterport/Mask_RCNN
+
+於Anaconda的環境中新增安裝scikit-image, cython, h5py https://github.com/markjay4k/Mask-RCNN-series/blob/master/Mask_RCNN%20Install%20Instructions.ipynb
+
+在激活Anaconda, 並用pip install eras <不可用anaconda裝keras, 因為會自動裝tensor flow 1.1>
+$ pip install keras==2.1.4 (也試過2.1.5是ＯＫ)
+
+因為Mask R-CNN是基於COCO數據集，故須先調用COCO api
+下載COCO api，並放到資料夾 ～/Code/COCO/cocoapi-master 
+https://github.com/cocodataset/cocoapi
+
+激活Anaconda python35環境
+$ source activate py35_opt_tensorflow140
+
+進入coco的PythonAPI
+cd /Users/siquare/Desktop/Code/cocoapi-master/PythonAPI
+
+執行命令
+$ python setup.py install
+
+但可能會有些warning，保險起見打開setup.py，並刪除下面
+’-Wno-cpp', '-Wno-unused-function'
+
+再次輸入執行命令
+$ python setup.py install
+
+無error出現，且/PythonAPI內出現pycocotools，代表成功編譯
+且pip list出現pycocotools
+
+下載Mask R-CNN(Mask_RCNN-master)，並放到code/Mask R-CNN
+https://github.com/matterport/Mask_RCNN
+
+下載Mask R-CNN已經訓練好的模型mask_rcnn_coco.h5，放到code/Mask R-CNN/Mask_RCNN-master
+https://github.com/matterport/Mask_RCNN/releases
+
+$ jupyter notebook 
+
+去打開demo.ipynb，執行後必須能出現圖片分割＋辨識．
+
+
+測試7-用tensorflow＋Mask R-CNN做到 Real-time instance segmentation
+[參考7-1]https://ai-coordinator.jp/mask-r-cnn
+[參考7-2]https://github.com/markjay4k/Mask-RCNN-series/blob/master/visualize_cv.py
+[參考7-2,video]https://www.youtube.com/watch?v=lLM8oAsi32g
+
+打開Anaconda的Spyder，新增上述網頁(參考7-1)最下面的code
+即可分割＋辨識..<但會很lag..>
