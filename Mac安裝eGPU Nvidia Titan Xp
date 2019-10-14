@@ -1,0 +1,344 @@
+107.3.5 Mac安裝eGPU Nvidia Titan Xp
+
+0.mac先開機到桌面，插上eGPU的TH3線(Titan Xp in AKiTo Node)
+1.mac關機
+2.mac重開機且按住(⌘ and R)，進入Recovery Mode
+3-1.Menu Bar click Utilities > Terminal, and 輸入"csrutil disable; reboot",enter重開機
+3-2.mac重啟動後於terminal執行"csrutil status", 如呈現disable, 即為成功關閉SIP
+
+4.呈上, 於terminal執行下述命令~
+cd ~/Desktop; git clone https://github.com/goalque/automate-eGPU.git; chmod +x ~/Desktop/automate-eGPU/automate-eGPU.sh; sudo ~/Desktop/automate-eGPU/./automate-eGPU.sh
+
+5.從mac拔開連接eGPU的TH3線，再重新啟動(先拔，再重啟!)
+
+6.打開terminal, 並執行下述命令
+sudo ~/Desktop/automate-eGPU/./automate-eGPU.sh -a
+
+
+7.mac插上eGPU的TH3線
+
+8.重新啟動mac
+
+9.點"About this Mac / Sytem Report / Graphics/Displays", 應可看到Nvidia Card.
+
+Ref:
+https://gist.github.com/jganzabal/8e59e3b0f59642dd0b5f2e4de03c7687
+
+
+進入安裝CUDA, cuDNN, Tensorflow and Eras 1. 安裝CUDA Toolkit 8.0 GA2 (Feb 2017)
+https://developer.nvidia.com/cuda-toolkit-archive
+
+2.設定環境變數
+打開terminal, 輸入..
+vim ~/.bash_profile
+
+於文檔最後，輸入..
+export CUDA_HOME=/usr/local/cuda
+export DYLD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME:$CUDA_HOME/extras/CUPTI/lib:/Developer/NVIDIA/CUDA-8.0/lib"
+export LD_LIBRARY_PATH=$DYLD_LIBRARY_PATH
+export PATH=$DYLD_LIBRARY_PATH:$PATH    (這一行是另外加的，不然會找不到cuda資料夾)
+export flags="--config=cuda --config=opt"     (x, 先不加)
+
+===<107.3.29找到的方法, 成功OK解決>=================================
+問題：Library not loaded: @rpath/libgfortran.3.dylib
+解法：
+因為Anaconda的環境py35_egpu_tensorflow140曾經裝過gcc又移除，再裝回就解決這問題．
+=============================================================
+
+===<107.3.29找到的方法, 成功OK解決>=================================
+問題：Library not loaded: @rpath/libcublas.8.0.dylib
+解法：
+
+export DYLD_LIBRARY_PATH="$CUDA_HOME/lib:$CUDA_HOME:$CUDA_HOME/extras/CUPTI/lib:/Developer/NVIDIA/CUDA-8.0/lib"
+=============================================================
+
+按 esc    （代表跳出編輯模式）
+輸入 :w   （代表write 寫入存擋）
+輸入 :q    （代表退出）
+
+然後輸入 source ~/.bash_profile  （代表立即生效）
+輸入 echo $PATH, 確認成功加入
+
+
+3.下載cuDNN cudnn-8.0-osx-x64-v6.0  https://developer.nvidia.com/rdp/cudnn-download
+
+然後輸入
+cd ~/Downloads/cuda
+sudo cp include/* /usr/local/cuda/include/
+sudo cp lib/* /usr/local/cuda/lib/
+
+4.確認Cuda有裝好，逐步輸入下面，且無error
+cd /usr/local/cuda/samples
+sudo make -C 1_Utilities/deviceQuery
+./bin/x86_64/darwin/release/deviceQuery
+
+結果出現..
+xcode-select: error: tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance
+expr: syntax error
+/Developer/NVIDIA/CUDA-8.0/bin/nvcc -ccbin g++ -I../../common/inc  -m64  -Xcompiler -arch -Xcompiler x86_64  -gencode arch=compute_20,code=sm_20 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35 -gencode arch=compute_37,code=sm_37 -gencode arch=compute_50,code=sm_50 -gencode arch=compute_52,code=sm_52 -gencode arch=compute_60,code=sm_60 -gencode arch=compute_60,code=compute_60 -o deviceQuery.o -c deviceQuery.cpp
+nvcc warning : The 'compute_20', 'sm_20', and 'sm_21' architectures are deprecated, and may be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+nvcc fatal   : The version ('90000') of the host compiler ('Apple clang') is not supported
+make: *** [deviceQuery.o] Error 1
+
+原因是因為我的xcode 9.2 衝到 cuda 8.0.61…. 按網友所述，cuda 8.0.61只能對應xcode 8.0
+
+下載Xcode 8.0, 並放到/application, 且更名為Xcode8
+
+然後更改默認版本從9.2改為8.0, 輸入下～
+sudo xcode-select -s /Applications/Xcode8.app
+
+確認版本是8.0, 輸入下出現8.0~
+/usr/bin/xcodebuild -version
+
+再次輸入～
+cd /usr/local/cuda/samples
+sudo make -C 1_Utilities/deviceQuery
+./bin/x86_64/darwin/release/deviceQuery
+
+還是不行....
+
+因為沒有安裝cud driver 8.0.9, 點選下載
+http://www.nvidia.com/object/mac-driver-archive.html
+https://www.cnblogs.com/wolfray/p/8040694.html
+ 
+重開機
+Terminal 輸入
+cd /usr/local/cuda/samples
+sudo make -C 1_Utilities/deviceQuery
+./bin/x86_64/darwin/release/deviceQuery
+
+出現 Result = PASS….. 代表cuda安裝完成
+
+
+5.『Build Tensorflow』事前準備
+安装 JDK 8
+http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html
+
+重開機…
+
+*****************************
+安裝 bazel
+brew install bazel
+*****************************
+
+6.build tensorflow 1.4.0
+於Anaconda 建立python 35環境(py35_egpu_tensorflow140), 且安裝six, wheel,pillow, numpy, lxml, spicy, git, gcc(不裝, Mac本機有4.2.1)..
+
+進入terminal, 激活環境source activate py35_egpu_tensorflow140
+
+<但沒有對應可用的>[別人build好的tensorflow] https://github.com/lakshayg/tensorflow-build
+
+進入資料夾tensorflow-source
+cd /Users/siquare/Desktop/Code/tensorflow_source  
+
+複製最新tensorflow到目錄下指定資料夾tensorflow(桌面上tensorflow_source下就會新增tensorflow 原始碼)
+git clone https://github.com/tensorflow/tensorflow 
+
+進入資料夾
+cd tensorflow
+
+
+改版本成tensorflow r1.4 <沒用這, 所以載最新r1.5>
+git checkout r1.4
+
+再進入資料夾tensor flow
+cd tensorflow
+
+啟動配置
+./configure
+(參考, https://benbenbang.github.io/share/How-to-install-tensorflow-with-higher-version-using-GPU/)
+(參考, https://gist.github.com/smitshilu/53cf9ff0fd6cdb64cca69a7e2827ed0f)
+
+出現configuration finish
+
+輸入
+bazel build --config=cuda --config=opt --action_env PATH --action_env LD_LIBRARY_PATH --action_env DYLD_LIBRARY_PATH //tensorflow/tools/pip_package:build_pip_package
+
+
+結果出現..
+File "/private/var/tmp/_bazel_siquare/965feda370c0b652c2bac1693bb090ee/external/io_bazel_rules_closure/closure/repositories.bzl", line 69, in closure_repositories
+		_check_bazel_version("Closure Rules", "0.4.5")
+	File "/private/var/tmp/_bazel_siquare/965feda370c0b652c2bac1693bb090ee/external/io_bazel_rules_closure/closure/repositories.bzl", line 172, in _check_bazel_version
+		fail(("%s requires Bazel >=%s but was...)))
+Closure Rules requires Bazel >=0.4.5 but was 0.11.0-homebrew
+ERROR: Error evaluating WORKSPACE file error loading package 'external': Package 'external' contains errors
+「same problem」https://github.com/tensorflow/tensorflow/issues/17137
+
+解決方法有2steps
+Step1
+打開~/tensorflow/workspace.bzl，  將check_version(“0.5.4”)，改為check_version(“0.11.0”)
+<因為我目前brew裝的bazel是0.11.0>
+
+Step2 (下面資料夾位置每一次都會變動..)
+打開 /private/var/tmp/_bazel_siquare/965feda370c0b652c2bac1693bb090ee/external/io_bazel_rules_closure/closure/repositories.bzl"
+修改line 69的_check_bazel_version("Closure Rules", “0.4.5”), 改為0.11.0
+「same problem, youpicontini」https://github.com/tensorflow/tensorflow/issues/16654
+
+再次輸入
+bazel build --config=cuda --config=opt --action_env PATH --action_env LD_LIBRARY_PATH --action_env DYLD_LIBRARY_PATH //tensorflow/tools/pip_package:build_pip_package
+
+
+再次出現error
+WARNING: Config values are not defined in any .rc file: cuda, opt
+ERROR: Skipping '//tensorflow/tools/pip_package:build_pip_package': no such package 'tensorflow/tools/pip_package': BUILD file not found on package path
+WARNING: Target pattern parsing failed.
+ERROR: no such package 'tensorflow/tools/pip_package': BUILD file not found on package path
+
+
+根據網友youpicontini, 「參考」https://github.com/tensorflow/tensorflow/issues/16654
+建議把bazel build....改成下
+bazel build --config=opt --incompatible_load_argument_is_label=false --incompatible_disallow_uncalled_set_constructor=false //tensorflow/tools/pip_package:build_pip_package
+
+
+於是擷取出 『 —ncompatible_load_argument_is_label=false --incompatible_disallow_uncalled_set_constructor=false 』
+合體成... bazel build --config=cuda --config=opt --incompatible_load_argument_is_label=false --incompatible_disallow_uncalled_set_constructor=false --action_env PATH --action_env LD_LIBRARY_PATH --action_env DYLD_LIBRARY_PATH //tensorflow/tools/pip_package:build_pip_package
+
+但又出現.. ERROR: /private/var/tmp/_bazel_siquare/71aec48dd30a16fe9139fa7c18585054/external/farmhash_archive/BUILD.bazel:19:1: C++ compilation of rule '@farmhash_archive//:farmhash' failed (Exit 1)
+gcc: error: unrecognized command line option '-fcolor-diagnostics'
+gcc: error: unrecognized command line option '-Wthread-safety'
+gcc: error: unrecognized command line option '-Wself-assign'
+Target //tensorflow/tools/pip_package:build_pip_package failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+INFO: Elapsed time: 25.064s, Critical Path: 0.32s
+FAILED: Build did NOT complete successfully 
+以上，可能是gcc版本不對
+
+先進入anaconda，將gcc反安裝卸載
+然後 $ source deactivate
+刪除tensorflow 1.4.0的source code, 再放一次tensorflow 1.4.0的source code , 然後...
+
+安裝homebrew gcc(0.7.3版本)
+$ brew install gcc
+<電腦會自動裝	gcc	gmp	   isl  	libmpc	mpfr>
+
+
+『參考』https://benbenbang.github.io/share/How-to-install-tensorflow-with-higher-version-using-GPU/
+打開 tensorflow/core/kernels/depthwise_conv_op_gpu.cu.cc
+(166, 436, 1054, 1313行)  extern __shared__ __align__(sizeof(T)) unsigned char shared_memory[];
+改為                                    extern __shared__ unsigned char shared_memory[];
+
+打開 tensorflow/core/kernels/split_lib_gpu.cu.c
+(122行)  extern __shared__ __align__(sizeof(T)) unsigned char smem[];
+改為       extern __shared__  unsigned char smem[];
+
+打開 tensorflow/core/kernels/concat_lib_gpu.impl.cu.cc
+(72行)   extern __shared__ __align__(sizeof(T)) unsigned char smem[];
+改為      extern __shared__  unsigned char smem[];
+
+打開 tensorflow/third_party/gpus/cuda/BUILD.tpl
+(112行)   linkopts = ["-lgomp"]
+改為       linkopts = ["-L/usr/local/Cellar/gcc/7.3.0/bin/gcc-7"]
+
+接著從./configure開始做... 出現...
+./tensorflow/core/framework/variant.h(343): error: constexpr constructor calls non-constexpr function "std::__1::unique_ptr<_Tp, _Dp>::unique_ptr() [with _Tp=tensorflow::Variant::ValueInterface, _Dp=std::__1::default_delete<tensorflow::Variant::ValueInterface>]"
+1 error detected in the compilation of "/var/folders/wm/bx72n6kn2c5_d0w0fnymrm740000gn/T//tmpxft_000013fe_00000000-7_beam_search_ops_gpu.cu.cpp1.ii".
+ERROR: /Users/siquare/Desktop/Code/tensorflow_source/tensorflow-1.4.0/tensorflow/contrib/seq2seq/BUILD:51:1: output 'tensorflow/contrib/seq2seq/_objs/python/ops/_beam_search_ops_gpu/tensorflow/contrib/seq2seq/kernels/beam_search_ops_gpu.cu.pic.o' was not created
+ERROR: /Users/siquare/Desktop/Code/tensorflow_source/tensorflow-1.4.0/tensorflow/contrib/seq2seq/BUILD:51:1: not all outputs were created or valid
+Target //tensorflow/tools/pip_package:build_pip_package failed to build
+Use --verbose_failures to see the command lines of failed build steps.
+
+打開tensorflow/core/framework/variant.h
+(343行)  std::unique_ptr<ValueInterface> value_;
+改為        std::shared_ptr<ValueInterface> value_;
+
+輸入
+bazel build --config=cuda --config=opt --incompatible_load_argument_is_label=false --incompatible_disallow_uncalled_set_constructor=false --action_env PATH --action_env LD_LIBRARY_PATH --action_env DYLD_LIBRARY_PATH //tensorflow/tools/pip_package:build_pip_package
+
+終於耗時3115sec, 完成compile
+緊接著輸入..
+bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
+
+輸入下面後，即生成.whl
+bazel-bin/tensorflow/tools/pip_package/build_pip_package /tmp/tensorflow_pkg
+
+找尋.whl正確的名稱
+ls /tmp/tensorflow_pkg
+
+呈上, 出現..
+tensorflow-1.4.0-cp35-cp35m-macosx_10_6_x86_64.whl
+
+輸入pip list, 確定無tensorflow
+輸入conda list, 確定無tensorflow
+
+輸入..
+$ pip install /tmp/tensorflow_pkg/tensorflow-1.4.0-cp35-cp35m-macosx_10_6_x86_64.whl
+
+$pip list  (或 conda list)
+出現
+…
+protobuf (3.5.2)
+tensorflow (1.4.0)
+tensorflow-tensorboard (0.4.0)
+…
+
+測試1..
+$python
+import tensorflow as tf
+hello = tf.constant('Hello, TensorFlow!')
+sess = tf.Session()
+print(sess.run(hello))
+>>b'Hello, TensorFlow!'
+
+$a = tf.constant(10)
+$b = tf.constant(32)
+$print(sess.run(a + b))
+>> 42
+
+測試2..
+$ cd tensorflow/examples/get_started/regression
+$ python3 dnn_regression.py
+
+>>…. >>INFO:tensorflow:Saving checkpoints for 5000 into /var/folders/wm/bx72n6kn2c5_d0w0fnymrm740000gn/T/tmpp6dql397/model.ckpt.
+>>tensorflow:Loss for final step: 291.00922.
+>>2018-03-11 01:32:56.328955: I tensorflow/core/common_runtime/gpu/gpu_device.cc:1120] Creating TensorFlow device (/device:GPU:0) -> (device: 0, name: TITAN Xp, pci bus id: 0000:85:00.0, compute capability: 6.1)
+>>INFO:tensorflow:Saving dict for global step 5000: average_loss = 4.0478783, global_step = 5000, loss = 198.34604
+>>********************************************************************************
+>>RMS error for the test set: $2012
+(花約2分鐘)
+
+
+
+測試3-用tensorflow＋Mask R-CNN做到 instance segmentation
+激活環境後，用spyder打開 1070323_Object Detect_ok.py
+如果出現 Library not loaded: @rpath/libcublas.8.0.dylib
+
+那改用terminal去開
+$ spyder
+應可出現辨識．
+
+
+================================================================
+接著開始設定tensor flow model
+anaconda中安裝libprotobuf
+
+Tensorflow model做一次就可以
+$ protoc object_detection/protos/*.proto --python_out=.
+================================================================
+
+===========遇到問題，就把下面新增==============
+# 將 models/research 與 models/research/slim 加入 PYTHONPATH
+export PYTHONPATH=$PYTHONPATH:/Users/siquare/Desktop/Code/tensorflow/models-master/research:/Users/siquare/Desktop/Code/tensorflow/models-master/research/slim
+
+# 將該anaconda的package位置加入
+export PYTHONPATH=$PYTHONPATH:/Users/siquare/anaconda3/envs/py35_egpu_tensorflow140/lib/python3.5/site-packages 
+================================================================
+
+
+ $ python object_detection/builders/model_builder_test.py
+測試出現OK, 就大功告成一半^^
+
+$ cd object_detection <其實這個步驟可以跳過，執行下一個即可>
+
+$ jupyter notebook      <這一定要，不能直接點擊jupyternotebook>
+
+如果要用到openCV, 就安裝opencv 非官方版<example會用到> $pip install opencv-contrib-python
+
+
+
+
+
+Ref
+https://www.jianshu.com/p/acb1f062a925
+http://tomtangrx.github.io/2015/12/16/mac-path.html
+http://edscb.blogspot.tw/2014/02/mac-osx.html
+
